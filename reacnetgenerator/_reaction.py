@@ -45,7 +45,7 @@ class ReactionsFinder(SharedRNGData):
         )
 
     def findreactions(self, atomeach, conflict):
-        allreactions = []
+        reaction_counts = Counter()
         # atomeach j, atomeach j+1, conflict j, conflict j+1
         if self.printreactionevent:
             givenarray = (
@@ -75,7 +75,7 @@ class ReactionsFinder(SharedRNGData):
                 for events in results:
                     for event in events:
                         reaction = "->".join((event["Reactant"], event["Product"]))
-                        allreactions.append(reaction)
+                        reaction_counts[reaction] += 1
                         event_writer.writerow(
                             [
                                 event["Timestep_Index"],
@@ -85,9 +85,11 @@ class ReactionsFinder(SharedRNGData):
                         )
         else:
             for reactions in results:
-                allreactions.extend(reactions)
+                reaction_counts.update(
+                    reaction for reaction in reactions if reaction is not None
+                )
         # reaction with SMILES
-        allreactionswithname = Counter(allreactions).most_common()
+        allreactionswithname = reaction_counts.most_common()
         with WriteBuffer(open(self.reactionabcdfilename, "w"), sep="\n") as f:
             for reaction, number in allreactionswithname:
                 if reaction is not None:
