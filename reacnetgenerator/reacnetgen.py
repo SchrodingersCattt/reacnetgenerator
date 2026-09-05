@@ -48,6 +48,7 @@ import itertools
 import os
 import time
 from enum import Enum
+from pathlib import Path
 from typing import Any, ClassVar
 
 import numpy as np
@@ -184,6 +185,7 @@ class ReacNetGenerator:
             "use_ase": False,
             "ase_cutoff_mult": 1.2,
             "custom_cutoffs": None,
+            "output_dir": None,
         }
         none_key = [
             "selectatoms",
@@ -245,8 +247,19 @@ class ReacNetGenerator:
                 kwargs[kk] = default_value[kk]
         for kk in itertools.chain(none_key, accept_keys):
             kwargs.setdefault(kk, None)
+        output_dir = kwargs.get("output_dir")
+        output_path = None
+        if output_dir is not None:
+            output_path = Path(output_dir).expanduser()
+            output_path.mkdir(parents=True, exist_ok=True)
+            kwargs["output_dir"] = str(output_path)
         for kk in file_key:
-            kwargs.setdefault(kk, f"{kwargs['inputfilename'][0]}.{file_key[kk]}")
+            default_filename = (
+                str(output_path / file_key[kk])
+                if output_path is not None
+                else f"{kwargs['inputfilename'][0]}.{file_key[kk]}"
+            )
+            kwargs.setdefault(kk, default_filename)
         for kk in nparray_key:
             kwargs[kk] = np.array(kwargs[kk])
         for kk in ("moleculeframes", "moleculetimesteps"):
@@ -290,6 +303,23 @@ class ReacNetGenerator:
                 self.cell = cell.reshape((3, 3))
             else:
                 raise RuntimeError(cell_error)
+        self.artifacts = self._build_artifact_map()
+
+    def _build_artifact_map(self) -> dict[str, str]:
+        """Return the semantic artifact paths for this analysis."""
+        return {
+            "moname": self.moleculefilename,
+            "molecules": self.moleculetimelinefilename,
+            "route": self.atomroutefilename,
+            "reactions": self.reactionfilename,
+            "table": self.tablefilename,
+            "network": self.imagefilename,
+            "species": self.speciesfilename,
+            "report": self.resultfilename,
+            "json": self.jsonfilename,
+            "reactionabcd": self.reactionabcdfilename,
+            "reactionevent": self.reactioneventfilename,
+        }
 
     @staticmethod
     def _normalize_optional_int_filter(value):
@@ -390,7 +420,7 @@ class ReacNetGenerator:
     # ------------------------------------------------------------------
     def runanddraw(
         self, run: bool = True, draw: bool = True, report: bool = True
-    ) -> None:
+    ) -> dict[str, str]:
         """Analyze the trajectory from MD simulation.
 
         Parameters
@@ -419,8 +449,9 @@ class ReacNetGenerator:
         if report:
             processthing.append(self.Status.REPORT)
         self._process(processthing)
+        return dict(self.artifacts)
 
-    def run(self) -> None:
+    def run(self) -> dict[str, str]:
         """Process MD trajectory, including DOWNLOAD, DETECT, HMM, PATH, and MATRIX steps."""
         processthing = []
         if self.urls:
@@ -434,6 +465,7 @@ class ReacNetGenerator:
             )
         )
         self._process(processthing)
+        return dict(self.artifacts)
 
     def draw(self) -> None:
         """Draw the reaction network, i.e. NETWORK step."""
